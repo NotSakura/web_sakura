@@ -243,6 +243,7 @@
       const size = 14 + Math.random() * 14;
       el.style.fontSize = size + "px";
       el.style.color = colors[(Math.random() * colors.length) | 0];
+      el.style.opacity = "0";
       layer.appendChild(el);
       notes.push({
         el,
@@ -252,8 +253,9 @@
         vy: -(0.8 + Math.random() * 0.8),
         rot: Math.random() * 60 - 30,
         vr: Math.random() * 2 - 1,
-        life: 0,
-        alpha: 1,
+        // notes rise at most ~a quarter of the screen height above the CD
+        ceiling: c.y - window.innerHeight * 0.25 * (0.72 + Math.random() * 0.28),
+        alpha: 0,
       });
     }
 
@@ -263,10 +265,12 @@
         if (falling) {
           n.vy += 0.28; // gravity pulls them back down
           n.alpha -= 0.006;
+        } else if (n.y <= n.ceiling) {
+          n.vy *= 0.6; // reached the quarter-screen ceiling: settle and fade
+          n.alpha -= 0.02;
         } else {
-          n.vy *= 0.995;
-          n.life++;
-          n.alpha = Math.max(0, 1 - n.life / 150);
+          n.vy *= 0.995; // keep drifting up, fading in
+          n.alpha = Math.min(1, n.alpha + 0.03);
         }
         n.x += n.vx;
         n.y += n.vy;
@@ -307,8 +311,11 @@
         cd.classList.add("is-playing");
         cd.setAttribute("aria-pressed", "true");
         startNotes();
+        disarmUnlock();
       }).catch(() => {
+        // browser blocked autoplay: start on the first user interaction instead
         cd.setAttribute("aria-pressed", "false");
+        armUnlock();
       });
     }
 
@@ -319,7 +326,28 @@
       dropNotes();
     }
 
+    // if autoplay is blocked, start on the first gesture anywhere (except the CD,
+    // which manages its own toggle)
+    let unlockers = [];
+    function armUnlock() {
+      if (unlockers.length) return;
+      const evs = ["pointerdown", "keydown", "touchend", "click"];
+      const h = (e) => {
+        if (e.target && e.target.closest && e.target.closest("#cd")) return;
+        play();
+      };
+      evs.forEach((ev) => document.addEventListener(ev, h, { passive: true }));
+      unlockers = evs.map((ev) => [ev, h]);
+    }
+    function disarmUnlock() {
+      unlockers.forEach(([ev, h]) => document.removeEventListener(ev, h));
+      unlockers = [];
+    }
+
     cd.addEventListener("click", () => (audio.paused ? play() : pause()));
     audio.addEventListener("ended", pause); // safety, though it loops
+
+    audio.volume = 0.6;
+    play(); // try to autostart on load; falls back to first user gesture
   }
 })();
