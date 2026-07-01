@@ -212,4 +212,85 @@
     init();
     tick();
   }
+
+  /* ---------- ambient instrumental (original, synthesized) ---------- */
+  // NOTE: this is an original royalty-free ambient loop generated with the
+  // Web Audio API, not a copyrighted recording.
+  const cd = document.getElementById("cd");
+  if (cd) {
+    let ctx, master, filter, delay, feedback, playing = false, timer = null, bar = 0, nextTime = 0;
+    const barLen = 2.0;
+    // gentle vi-IV-I-V progression (A minor, F, C, G): pad chord + arpeggio
+    const prog = [
+      { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
+      { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
+      { pad: [130.81, 164.81, 196.0], arp: [392.0, 523.25, 659.25, 523.25] },
+      { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
+    ];
+
+    function buildGraph() {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.gain.value = 0.16;
+      filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1900;
+      delay = ctx.createDelay();
+      delay.delayTime.value = 0.28;
+      feedback = ctx.createGain();
+      feedback.gain.value = 0.28;
+      filter.connect(master);
+      filter.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(master);
+      master.connect(ctx.destination);
+    }
+
+    function note(freq, start, dur, type, peak) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      o.connect(g);
+      g.connect(filter);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(peak, start + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o.start(start);
+      o.stop(start + dur + 0.05);
+    }
+
+    function scheduleBar() {
+      const t = nextTime;
+      const chord = prog[bar % prog.length];
+      chord.pad.forEach((f) => note(f, t, barLen * 0.95, "sine", 0.05));
+      chord.arp.forEach((f, i) => note(f, t + i * (barLen / 4), (barLen / 4) * 0.9, "triangle", 0.09));
+      bar++;
+      nextTime += barLen;
+      const ahead = (nextTime - ctx.currentTime) * 1000 - 120;
+      timer = setTimeout(scheduleBar, Math.max(0, ahead));
+    }
+
+    function play() {
+      if (!ctx) buildGraph();
+      if (ctx.state === "suspended") ctx.resume();
+      playing = true;
+      nextTime = ctx.currentTime + 0.08;
+      scheduleBar();
+      cd.classList.add("is-playing");
+      cd.setAttribute("aria-pressed", "true");
+    }
+
+    function stop() {
+      playing = false;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (ctx) ctx.suspend();
+      cd.classList.remove("is-playing");
+      cd.setAttribute("aria-pressed", "false");
+    }
+
+    cd.addEventListener("click", () => (playing ? stop() : play()));
+  }
 })();
