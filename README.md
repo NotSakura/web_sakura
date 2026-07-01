@@ -4,6 +4,7 @@ A custom animated portfolio (no build step) — plain HTML / CSS / JS, hosted on
 
 ## Features
 - 🌸 Falling cherry-blossom petals (canvas)
+- Lo-fi CD player: click the disc to play `audio/lofi.mp3`; music notes float up while playing and fall when paused
 - Typewriter tagline, scroll-reveal, count-up stats, equalizer + cursor glow
 - Sections: About · Experience · Projects · Interests (Computer Vision · Music · Live Concerts) · Contact
 - Fully responsive + respects `prefers-reduced-motion`

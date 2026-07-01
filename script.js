@@ -213,167 +213,113 @@
     tick();
   }
 
-  /* ---------- ambient instrumentals (original, synthesized) ---------- */
-  // NOTE: every track below is an original royalty-free loop generated with the
-  // Web Audio API in real time, not a copyrighted recording.
+  /* ---------- lo-fi CD player + floating notes ---------- */
   const cd = document.getElementById("cd");
-  const cdMenu = document.getElementById("cdMenu");
-  if (cd && cdMenu) {
-    // each track: barLen, padType, arpType, filter cutoff/Q, delay, master gain,
-    // whether it has an arpeggio and a bass note, and its chord progression.
-    const TRACKS = [
-      {
-        name: "Sakura Dream", barLen: 2.0, pad: "sine", arp: "triangle",
-        cutoff: 1900, q: 0.5, delay: 0.28, fb: 0.28, gain: 0.16, useArp: true, bass: false,
-        prog: [
-          { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
-          { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
-          { pad: [130.81, 164.81, 196.0], arp: [392.0, 523.25, 659.25, 523.25] },
-          { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
-        ],
-      },
-      {
-        name: "Lo-fi Study", barLen: 2.6, pad: "triangle", arp: "sine",
-        cutoff: 1150, q: 0.7, delay: 0.36, fb: 0.34, gain: 0.17, useArp: true, bass: true,
-        prog: [
-          { pad: [146.83, 174.61, 220.0, 261.63], arp: [293.66, 349.23, 440.0, 349.23] },
-          { pad: [196.0, 246.94, 293.66, 349.23], arp: [392.0, 493.88, 587.33, 493.88] },
-          { pad: [130.81, 164.81, 196.0, 246.94], arp: [523.25, 659.25, 493.88, 659.25] },
-          { pad: [220.0, 261.63, 329.63, 392.0], arp: [440.0, 523.25, 659.25, 523.25] },
-        ],
-      },
-      {
-        name: "Synthwave", barLen: 1.6, pad: "sawtooth", arp: "sawtooth",
-        cutoff: 2600, q: 2.5, delay: 0.24, fb: 0.3, gain: 0.12, useArp: true, bass: true,
-        prog: [
-          { pad: [130.81, 155.56, 196.0], arp: [523.25, 622.25, 784.0, 622.25] },
-          { pad: [174.61, 207.65, 261.63], arp: [698.46, 830.61, 1046.5, 830.61] },
-          { pad: [207.65, 261.63, 311.13], arp: [830.61, 1046.5, 1244.5, 1046.5] },
-          { pad: [233.08, 293.66, 349.23], arp: [932.33, 1174.66, 1396.91, 1174.66] },
-        ],
-      },
-      {
-        name: "8-bit Quest", barLen: 1.4, pad: "square", arp: "square",
-        cutoff: 3800, q: 1, delay: 0.16, fb: 0.18, gain: 0.09, useArp: true, bass: true,
-        prog: [
-          { pad: [261.63, 329.63, 392.0], arp: [523.25, 659.25, 784.0, 659.25] },
-          { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
-          { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
-          { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
-        ],
-      },
-      {
-        name: "Ambient Drift", barLen: 3.2, pad: "sine", arp: "sine",
-        cutoff: 900, q: 0.4, delay: 0.5, fb: 0.42, gain: 0.2, useArp: false, bass: true,
-        prog: [
-          { pad: [174.61, 261.63, 349.23] },
-          { pad: [220.0, 329.63, 440.0] },
-          { pad: [146.83, 220.0, 293.66] },
-          { pad: [116.54, 174.61, 233.08] },
-        ],
-      },
-    ];
+  const audio = document.getElementById("lofiAudio");
+  if (cd && audio) {
+    // note layer
+    const layer = document.createElement("div");
+    layer.className = "note-layer";
+    layer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(layer);
 
-    let ctx, master, filter, delay, feedback;
-    let current = -1, timer = null, bar = 0, nextTime = 0;
+    const glyphs = ["♪", "♫", "♩", "♬", "♪", "♫"];
+    const colors = ["#ff9ec2", "#ffb3c6", "#b98cff", "#ff6f9c"];
+    let notes = [];
+    let spawnTimer = null;
+    let rafId = null;
+    let falling = false;
 
-    function buildGraph() {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-      master = ctx.createGain();
-      filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      delay = ctx.createDelay();
-      feedback = ctx.createGain();
-      filter.connect(master);
-      filter.connect(delay);
-      delay.connect(feedback);
-      feedback.connect(delay);
-      delay.connect(master);
-      master.connect(ctx.destination);
+    function cdCenter() {
+      const r = cd.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
 
-    function note(freq, start, dur, type, peak) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = type;
-      o.frequency.value = freq;
-      o.connect(g);
-      g.connect(filter);
-      g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(peak, start + 0.04);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-      o.start(start);
-      o.stop(start + dur + 0.05);
-    }
-
-    function scheduleBar() {
-      const t = TRACKS[current];
-      const chord = t.prog[bar % t.prog.length];
-      chord.pad.forEach((f) => note(f, nextTime, t.barLen * 0.95, t.pad, 0.05));
-      if (t.bass) note(chord.pad[0] / 2, nextTime, t.barLen * 0.95, "triangle", 0.06);
-      if (t.useArp && chord.arp) {
-        const step = t.barLen / chord.arp.length;
-        chord.arp.forEach((f, i) => note(f, nextTime + i * step, step * 0.9, t.arp, 0.08));
-      }
-      bar++;
-      nextTime += t.barLen;
-      const ahead = (nextTime - ctx.currentTime) * 1000 - 120;
-      timer = setTimeout(scheduleBar, Math.max(0, ahead));
-    }
-
-    function play(index) {
-      if (!ctx) buildGraph();
-      if (ctx.state === "suspended") ctx.resume();
-      if (timer) clearTimeout(timer);
-      const t = TRACKS[index];
-      current = index;
-      bar = 0;
-      master.gain.value = t.gain;
-      filter.frequency.value = t.cutoff;
-      filter.Q.value = t.q;
-      delay.delayTime.value = t.delay;
-      feedback.gain.value = t.fb;
-      nextTime = ctx.currentTime + 0.08;
-      scheduleBar();
-      cd.classList.add("is-playing");
-      updateActive();
-    }
-
-    function stop() {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      current = -1;
-      if (ctx) ctx.suspend();
-      cd.classList.remove("is-playing");
-      updateActive();
-    }
-
-    const items = [...cdMenu.querySelectorAll(".cd-menu__item")];
-    function updateActive() {
-      items.forEach((b) => b.classList.toggle("is-active", b.dataset.track == current));
-    }
-
-    function toggleMenu(open) {
-      const show = open === undefined ? cdMenu.hidden : open;
-      cdMenu.hidden = !show;
-      cd.setAttribute("aria-expanded", String(show));
-    }
-
-    cd.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleMenu();
-    });
-
-    items.forEach((b) => {
-      b.addEventListener("click", () => {
-        if (b.dataset.track === "stop") stop();
-        else play(parseInt(b.dataset.track, 10));
+    function spawnNote() {
+      const el = document.createElement("span");
+      el.className = "music-note";
+      el.textContent = glyphs[(Math.random() * glyphs.length) | 0];
+      const c = cdCenter();
+      const size = 14 + Math.random() * 14;
+      el.style.fontSize = size + "px";
+      el.style.color = colors[(Math.random() * colors.length) | 0];
+      layer.appendChild(el);
+      notes.push({
+        el,
+        x: c.x + (Math.random() * 24 - 12),
+        y: c.y - 12,
+        vx: Math.random() * 0.8 - 0.4,
+        vy: -(0.8 + Math.random() * 0.8),
+        rot: Math.random() * 60 - 30,
+        vr: Math.random() * 2 - 1,
+        life: 0,
+        alpha: 1,
       });
-    });
+    }
 
-    // click outside closes the menu
-    document.addEventListener("click", (e) => {
-      if (!cdMenu.hidden && !e.target.closest(".cd-wrap")) toggleMenu(false);
-    });
+    function loop() {
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const n = notes[i];
+        if (falling) {
+          n.vy += 0.28; // gravity pulls them back down
+          n.alpha -= 0.006;
+        } else {
+          n.vy *= 0.995;
+          n.life++;
+          n.alpha = Math.max(0, 1 - n.life / 150);
+        }
+        n.x += n.vx;
+        n.y += n.vy;
+        n.rot += n.vr;
+        n.el.style.transform = `translate(${n.x}px, ${n.y}px) rotate(${n.rot}deg)`;
+        n.el.style.opacity = Math.max(0, n.alpha);
+        if (n.alpha <= 0 || n.y > window.innerHeight + 60 || n.y < -80) {
+          n.el.remove();
+          notes.splice(i, 1);
+        }
+      }
+      if (notes.length || !falling) rafId = requestAnimationFrame(loop);
+      else rafId = null;
+    }
+
+    function startNotes() {
+      falling = false;
+      if (!spawnTimer) spawnTimer = setInterval(spawnNote, 420);
+      if (!rafId) rafId = requestAnimationFrame(loop);
+      spawnNote();
+    }
+
+    function dropNotes() {
+      falling = true;
+      if (spawnTimer) {
+        clearInterval(spawnTimer);
+        spawnTimer = null;
+      }
+      // give each floating note a downward kick so they visibly fall
+      notes.forEach((n) => {
+        n.vy = Math.max(n.vy, 0.5 + Math.random());
+      });
+      if (!rafId) rafId = requestAnimationFrame(loop);
+    }
+
+    function play() {
+      audio.play().then(() => {
+        cd.classList.add("is-playing");
+        cd.setAttribute("aria-pressed", "true");
+        startNotes();
+      }).catch(() => {
+        cd.setAttribute("aria-pressed", "false");
+      });
+    }
+
+    function pause() {
+      audio.pause();
+      cd.classList.remove("is-playing");
+      cd.setAttribute("aria-pressed", "false");
+      dropNotes();
+    }
+
+    cd.addEventListener("click", () => (audio.paused ? play() : pause()));
+    audio.addEventListener("ended", pause); // safety, though it loops
   }
 })();
