@@ -252,13 +252,24 @@
     </footer>
   </main>
 
-  <!-- ===== ambient CD player (original synthesized loop) ===== -->
-  <button class="cd" id="cd" aria-label="Play ambient instrumental" aria-pressed="false">
-    <span class="cd__disc">
-      <span class="cd__label"></span>
-    </span>
-    <span class="cd__note">♪</span>
-  </button>
+  <!-- ===== ambient CD player (original synthesized loops) ===== -->
+  <div class="cd-wrap">
+    <div class="cd-menu" id="cdMenu" hidden>
+      <p class="cd-menu__title">Pick a track</p>
+      <button class="cd-menu__item" data-track="0">🌸 Sakura Dream</button>
+      <button class="cd-menu__item" data-track="1">☕ Lo-fi Study</button>
+      <button class="cd-menu__item" data-track="2">🌆 Synthwave</button>
+      <button class="cd-menu__item" data-track="3">🎮 8-bit Quest</button>
+      <button class="cd-menu__item" data-track="4">🌧 Ambient Drift</button>
+      <button class="cd-menu__item cd-menu__stop" data-track="stop">⏹ Stop</button>
+    </div>
+    <button class="cd" id="cd" aria-label="Choose ambient music" aria-expanded="false">
+      <span class="cd__disc">
+        <span class="cd__label"></span>
+      </span>
+      <span class="cd__note">♪</span>
+    </button>
+  </div>
 
   <script src="script.js"></script>
 </body>

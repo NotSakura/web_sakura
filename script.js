@@ -213,32 +213,77 @@
     tick();
   }
 
-  /* ---------- ambient instrumental (original, synthesized) ---------- */
-  // NOTE: this is an original royalty-free ambient loop generated with the
-  // Web Audio API, not a copyrighted recording.
+  /* ---------- ambient instrumentals (original, synthesized) ---------- */
+  // NOTE: every track below is an original royalty-free loop generated with the
+  // Web Audio API in real time, not a copyrighted recording.
   const cd = document.getElementById("cd");
-  if (cd) {
-    let ctx, master, filter, delay, feedback, playing = false, timer = null, bar = 0, nextTime = 0;
-    const barLen = 2.0;
-    // gentle vi-IV-I-V progression (A minor, F, C, G): pad chord + arpeggio
-    const prog = [
-      { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
-      { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
-      { pad: [130.81, 164.81, 196.0], arp: [392.0, 523.25, 659.25, 523.25] },
-      { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
+  const cdMenu = document.getElementById("cdMenu");
+  if (cd && cdMenu) {
+    // each track: barLen, padType, arpType, filter cutoff/Q, delay, master gain,
+    // whether it has an arpeggio and a bass note, and its chord progression.
+    const TRACKS = [
+      {
+        name: "Sakura Dream", barLen: 2.0, pad: "sine", arp: "triangle",
+        cutoff: 1900, q: 0.5, delay: 0.28, fb: 0.28, gain: 0.16, useArp: true, bass: false,
+        prog: [
+          { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
+          { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
+          { pad: [130.81, 164.81, 196.0], arp: [392.0, 523.25, 659.25, 523.25] },
+          { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
+        ],
+      },
+      {
+        name: "Lo-fi Study", barLen: 2.6, pad: "triangle", arp: "sine",
+        cutoff: 1150, q: 0.7, delay: 0.36, fb: 0.34, gain: 0.17, useArp: true, bass: true,
+        prog: [
+          { pad: [146.83, 174.61, 220.0, 261.63], arp: [293.66, 349.23, 440.0, 349.23] },
+          { pad: [196.0, 246.94, 293.66, 349.23], arp: [392.0, 493.88, 587.33, 493.88] },
+          { pad: [130.81, 164.81, 196.0, 246.94], arp: [523.25, 659.25, 493.88, 659.25] },
+          { pad: [220.0, 261.63, 329.63, 392.0], arp: [440.0, 523.25, 659.25, 523.25] },
+        ],
+      },
+      {
+        name: "Synthwave", barLen: 1.6, pad: "sawtooth", arp: "sawtooth",
+        cutoff: 2600, q: 2.5, delay: 0.24, fb: 0.3, gain: 0.12, useArp: true, bass: true,
+        prog: [
+          { pad: [130.81, 155.56, 196.0], arp: [523.25, 622.25, 784.0, 622.25] },
+          { pad: [174.61, 207.65, 261.63], arp: [698.46, 830.61, 1046.5, 830.61] },
+          { pad: [207.65, 261.63, 311.13], arp: [830.61, 1046.5, 1244.5, 1046.5] },
+          { pad: [233.08, 293.66, 349.23], arp: [932.33, 1174.66, 1396.91, 1174.66] },
+        ],
+      },
+      {
+        name: "8-bit Quest", barLen: 1.4, pad: "square", arp: "square",
+        cutoff: 3800, q: 1, delay: 0.16, fb: 0.18, gain: 0.09, useArp: true, bass: true,
+        prog: [
+          { pad: [261.63, 329.63, 392.0], arp: [523.25, 659.25, 784.0, 659.25] },
+          { pad: [196.0, 246.94, 293.66], arp: [392.0, 493.88, 587.33, 493.88] },
+          { pad: [220.0, 261.63, 329.63], arp: [440.0, 523.25, 659.25, 523.25] },
+          { pad: [174.61, 220.0, 261.63], arp: [349.23, 440.0, 523.25, 440.0] },
+        ],
+      },
+      {
+        name: "Ambient Drift", barLen: 3.2, pad: "sine", arp: "sine",
+        cutoff: 900, q: 0.4, delay: 0.5, fb: 0.42, gain: 0.2, useArp: false, bass: true,
+        prog: [
+          { pad: [174.61, 261.63, 349.23] },
+          { pad: [220.0, 329.63, 440.0] },
+          { pad: [146.83, 220.0, 293.66] },
+          { pad: [116.54, 174.61, 233.08] },
+        ],
+      },
     ];
+
+    let ctx, master, filter, delay, feedback;
+    let current = -1, timer = null, bar = 0, nextTime = 0;
 
     function buildGraph() {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain();
-      master.gain.value = 0.16;
       filter = ctx.createBiquadFilter();
       filter.type = "lowpass";
-      filter.frequency.value = 1900;
       delay = ctx.createDelay();
-      delay.delayTime.value = 0.28;
       feedback = ctx.createGain();
-      feedback.gain.value = 0.28;
       filter.connect(master);
       filter.connect(delay);
       delay.connect(feedback);
@@ -262,35 +307,73 @@
     }
 
     function scheduleBar() {
-      const t = nextTime;
-      const chord = prog[bar % prog.length];
-      chord.pad.forEach((f) => note(f, t, barLen * 0.95, "sine", 0.05));
-      chord.arp.forEach((f, i) => note(f, t + i * (barLen / 4), (barLen / 4) * 0.9, "triangle", 0.09));
+      const t = TRACKS[current];
+      const chord = t.prog[bar % t.prog.length];
+      chord.pad.forEach((f) => note(f, nextTime, t.barLen * 0.95, t.pad, 0.05));
+      if (t.bass) note(chord.pad[0] / 2, nextTime, t.barLen * 0.95, "triangle", 0.06);
+      if (t.useArp && chord.arp) {
+        const step = t.barLen / chord.arp.length;
+        chord.arp.forEach((f, i) => note(f, nextTime + i * step, step * 0.9, t.arp, 0.08));
+      }
       bar++;
-      nextTime += barLen;
+      nextTime += t.barLen;
       const ahead = (nextTime - ctx.currentTime) * 1000 - 120;
       timer = setTimeout(scheduleBar, Math.max(0, ahead));
     }
 
-    function play() {
+    function play(index) {
       if (!ctx) buildGraph();
       if (ctx.state === "suspended") ctx.resume();
-      playing = true;
+      if (timer) clearTimeout(timer);
+      const t = TRACKS[index];
+      current = index;
+      bar = 0;
+      master.gain.value = t.gain;
+      filter.frequency.value = t.cutoff;
+      filter.Q.value = t.q;
+      delay.delayTime.value = t.delay;
+      feedback.gain.value = t.fb;
       nextTime = ctx.currentTime + 0.08;
       scheduleBar();
       cd.classList.add("is-playing");
-      cd.setAttribute("aria-pressed", "true");
+      updateActive();
     }
 
     function stop() {
-      playing = false;
       if (timer) clearTimeout(timer);
       timer = null;
+      current = -1;
       if (ctx) ctx.suspend();
       cd.classList.remove("is-playing");
-      cd.setAttribute("aria-pressed", "false");
+      updateActive();
     }
 
-    cd.addEventListener("click", () => (playing ? stop() : play()));
+    const items = [...cdMenu.querySelectorAll(".cd-menu__item")];
+    function updateActive() {
+      items.forEach((b) => b.classList.toggle("is-active", b.dataset.track == current));
+    }
+
+    function toggleMenu(open) {
+      const show = open === undefined ? cdMenu.hidden : open;
+      cdMenu.hidden = !show;
+      cd.setAttribute("aria-expanded", String(show));
+    }
+
+    cd.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMenu();
+    });
+
+    items.forEach((b) => {
+      b.addEventListener("click", () => {
+        if (b.dataset.track === "stop") stop();
+        else play(parseInt(b.dataset.track, 10));
+      });
+    });
+
+    // click outside closes the menu
+    document.addEventListener("click", (e) => {
+      if (!cdMenu.hidden && !e.target.closest(".cd-wrap")) toggleMenu(false);
+    });
   }
 })();
